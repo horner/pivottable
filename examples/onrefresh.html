@@ -15,7 +15,19 @@
         <script type="text/javascript">
             $(function(){
                 var derivers = $.pivotUtilities.derivers;
+                var data;
 
+                var Refresh = function(config) {
+                    var config_copy = JSON.parse(JSON.stringify(config));
+                    //delete some values which are functions
+                    delete config_copy["aggregators"];
+                    delete config_copy["renderers"];
+                    delete config_copy["derivedAttributes"];
+                    //delete some bulky default values
+                    delete config_copy["rendererOptions"];
+                    delete config_copy["localeStrings"];
+                    $("#config_json").text(JSON.stringify(config_copy, undefined, 2));
+                }
                 var makePivot = function(mps) {
                     $("#output").pivotUI(mps, {
                         derivedAttributes: {
@@ -31,35 +43,36 @@
 //      "src": "Create Date"
 //    }
 //  },
-                        onRefresh: function(config) {
-                            var config_copy = JSON.parse(JSON.stringify(config));
-                            //delete some values which are functions
-                            delete config_copy["aggregators"];
-                            delete config_copy["renderers"];
-                            delete config_copy["derivedAttributes"];
-                            //delete some bulky default values
-                            delete config_copy["rendererOptions"];
-                            delete config_copy["localeStrings"];
-                            $("#config_json").text(JSON.stringify(config_copy, undefined, 2));
-                        }
+                        onRefresh: Refresh
                     });
                 };
-
                 $.getJSON("mps.json", makePivot);
                 $("#csv").bind("change", function(event){
                     var reader = new FileReader();
                     reader.onload = function(theFile) { 
                         try {
-                            var input = $.csv.toArrays(theFile.target.result);
+                            data = $.csv.toArrays(theFile.target.result);
 
                         }
                         catch(e) { 
                             alert("CSV Parse error: " +  e.message );
                             return; 
                         }
-                        makePivot(input);
+                        makePivot(data);
                     }
                     reader.readAsText(event.target.files[0]);
+                });
+
+                $("#config_json").bind("blur", function(event){
+                    var a = JSON.parse($(this).val());
+                    a.onRefresh=Refresh;
+                    a.renderers = $.extend(
+                        $.pivotUtilities.renderers,
+                        $.pivotUtilities.gchart_renderers,
+                        $.pivotUtilities.d3_renderers,
+                        $.pivotUtilities.jqwidgets_renderers
+                    );
+                    $("#output").pivotUI(data,a,true);
                 });
             })
         </script>
