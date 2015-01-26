@@ -29,7 +29,7 @@
                     $("#config_json").val(JSON.stringify(config_copy, undefined, 2));
                 }
                 var makePivot = function(mps) {
-                    data = $.csv.toArrays(mps);
+                    data = mps;
                     $("#output").pivotUI(data, {
                         onRefresh: Refresh
                     });
