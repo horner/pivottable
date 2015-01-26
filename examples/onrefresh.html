@@ -29,7 +29,10 @@
                     $("#config_json").val(JSON.stringify(config_copy, undefined, 2));
                 }
                 var makePivot = function(mps) {
-                    data = mps;
+                    if (typeof(mps)==='string') 
+                        data = $.csv.toArrays(mps);
+                    else
+                        data = mps;
                     $("#output").pivotUI(data, {
                         onRefresh: Refresh
                     });
