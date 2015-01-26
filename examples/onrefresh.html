@@ -29,20 +29,8 @@
                     $("#config_json").val(JSON.stringify(config_copy, undefined, 2));
                 }
                 var makePivot = function(mps) {
-                    $("#output").pivotUI(mps, {
-                        derivedAttributes: {
-//                            "Doug": derivers.dateFormat("Create Date", "%y"),
-//                            "Age Bin": derivers.bin("Age", 10),
-//                            "Gender Imbalance": function(mp) {
-//                                return mp["Gender"] == "Male" ? 1 : -1;
-//                            }
-                        },
-//  "derivedAttributesMacros": {
-//    "Create Date Month": {
-//      "fmt": "%m",
-//      "src": "Create Date"
-//    }
-//  },
+                    data = $.csv.toArrays(mps);
+                    $("#output").pivotUI(data, {
                         onRefresh: Refresh
                     });
                 };
