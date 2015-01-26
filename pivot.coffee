@@ -151,6 +151,12 @@ callWithJQuery ($) ->
                 totals: "Totals" #for table renderer
                 vs: "vs" #for gchart renderer
                 by: "by" #for gchart renderer
+                dateOnly: "Date Only"
+                monthOnly: "Month Only"
+                yearOnly: "Year Only"
+                quarterOnly: "Quarter Only"
+                hourOnly: "Hour Only"
+                weekdayOnly: "Week Day Only"
 
     #dateFormat deriver l10n requires month and day names to be passed in directly
     mthNamesEn = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
@@ -174,31 +180,65 @@ callWithJQuery ($) ->
                         when "H" then zeroPad(date.getHours())
                         when "M" then zeroPad(date.getMinutes())
                         when "S" then zeroPad(date.getSeconds())
+                        when "q" then Math.floor((date.getMonth()/3)+1)
                         else "%" + p
 
-    naturalSort = (as, bs) => #thanks http://stackoverflow.com/a/4373421/112871
-        rx = /(\d+)|(\D+)/g
-        rd = /\d/
-        rz = /^0/
-        if typeof as is "number" or typeof bs is "number"
-            return 1  if isNaN(as)
-            return -1  if isNaN(bs)
-            return as - bs
-        a = String(as).toLowerCase()
-        b = String(bs).toLowerCase()
-        return 0  if a is b
-        return (if a > b then 1 else -1)  unless rd.test(a) and rd.test(b)
-        a = a.match(rx)
-        b = b.match(rx)
-        while a.length and b.length
-            a1 = a.shift()
-            b1 = b.shift()
-            if a1 isnt b1
-                if rd.test(a1) and rd.test(b1)
-                    return a1.replace(rz, ".0") - b1.replace(rz, ".0")
-                else
-                    return (if a1 > b1 then 1 else -1)
-        a.length - b.length
+    #
+    # * Natural Sort algorithm for Javascript - Version 0.7 - Released under MIT license
+    # * Author: Jim Palmer (based on chunking idea from Dave Koelle)
+    # * http://www.overset.com/2008/09/01/javascript-natural-sort-algorithm-with-unicode-support/
+    # 
+    naturalSort = (a, b) ->
+        re = /(^-?[0-9]+(\.?[0-9]*)[df]?e?[0-9]?$|^0x[0-9a-f]+$|[0-9]+)/g
+        sre = /(^[ ]*|[ ]*$)/g
+        dre = /(^([\w ]+,?[\w ]+)?[\w ]+,?[\w ]+\d+:\d+(:\d+)?[\w ]?|^\d{1,4}[\/\-]\d{1,4}[\/\-]\d{1,4}|^\w+, \w+ \d+, \d{4})/
+        hre = /^0x[0-9a-f]+$/i
+        ore = /^0/
+        i = (s) ->
+            naturalSort.insensitive and ("" + s).toLowerCase() or "" + s
+
+        
+        # convert all to strings strip whitespace
+        x = i(a).replace(sre, "") or ""
+        y = i(b).replace(sre, "") or ""
+        
+        # chunk/tokenize
+        xN = x.replace(re, "\u0000$1\u0000").replace(/\0$/, "").replace(/^\0/, "").split("\u0000")
+        yN = y.replace(re, "\u0000$1\u0000").replace(/\0$/, "").replace(/^\0/, "").split("\u0000")
+        
+        # numeric, hex or date detection
+        xD = parseInt(x.match(hre)) or (xN.length isnt 1 and x.match(dre) and Date.parse(x))
+        yD = parseInt(y.match(hre)) or xD and y.match(dre) and Date.parse(y) or null
+        oFxNcL = undefined
+        oFyNcL = undefined
+        
+        # first try and sort Hex codes or Dates
+        if yD
+            if xD < yD
+                return -1
+            else return 1    if xD > yD
+        
+        # natural sorting through split numeric strings and default strings
+        cLoc = 0
+        numS = Math.max(xN.length, yN.length)
+
+        while cLoc < numS
+            
+            # find floats not starting with '0', string or 0 if not defined (Clint Priest)
+            oFxNcL = not (xN[cLoc] or "").match(ore) and parseFloat(xN[cLoc]) or xN[cLoc] or 0
+            oFyNcL = not (yN[cLoc] or "").match(ore) and parseFloat(yN[cLoc]) or yN[cLoc] or 0
+            
+            # handle numeric vs string comparison - number < string - (Kyle Adams)
+            if isNaN(oFxNcL) isnt isNaN(oFyNcL)
+                return (if (isNaN(oFxNcL)) then 1 else -1)
+            
+            # rely on string comparison if different types - i.e. '02' < 2 != '02' < '2'
+            else if typeof oFxNcL isnt typeof oFyNcL
+                oFxNcL += ""
+                oFyNcL += ""
+            return -1    if oFxNcL < oFyNcL
+            return 1    if oFxNcL > oFyNcL
+            cLoc++
 
     #expose these to the outside world
     $.pivotUtilities = {aggregatorTemplates, aggregators, renderers, derivers, locales,
@@ -222,6 +262,8 @@ callWithJQuery ($) ->
             @colTotals = {}
             @allTotal = @aggregator(this, [], [])
             @sorted = false
+
+            opts.derivedAttributes[k] = derivers.dateFormat(v.src,v.fmt) for k, v of opts.derivedAttributesMacros
 
             # iterate through input, accumulating data for cells
             PivotData.forEachRecord input, opts.derivedAttributes, (record) =>
@@ -482,6 +524,7 @@ callWithJQuery ($) ->
             aggregator: aggregatorTemplates.count()()
             aggregatorName: "Count"
             derivedAttributes: {},
+            derivedAttributesMacros: {}
             renderer: pivotTableRenderer
             rendererOptions: null
             localeStrings: locales.en.localeStrings
@@ -512,6 +555,7 @@ callWithJQuery ($) ->
     $.fn.pivotUI = (input, inputOpts, overwrite = false, locale="en") ->
         defaults =
             derivedAttributes: {}
+            derivedAttributesMacros: {}
             aggregators: locales[locale].aggregators
             renderers: locales[locale].renderers
             hiddenAttributes: []
@@ -525,12 +569,15 @@ callWithJQuery ($) ->
             filter: -> true
             localeStrings: locales[locale].localeStrings
 
+        thisOrig = this
+
         existingOpts = @data "pivotUIOptions"
         if not existingOpts? or overwrite
             opts = $.extend defaults, inputOpts
         else
             opts = existingOpts
 
+        opts.derivedAttributes[k] = derivers.dateFormat(v.src,v.fmt) for k, v of opts.derivedAttributesMacros
         try
             #cache the input in some useful form
             input = PivotData.convertToArray(input)
@@ -583,6 +630,29 @@ callWithJQuery ($) ->
                     valueList = $("<div>").addClass('pvtFilterBox').hide()
 
                     valueList.append $("<h4>").text("#{c} (#{keys.length})")
+                    
+                    date = new Date(Date.parse(keys[0]))  # This is not ideal as the first item could be empty.
+                    if !isNaN(date) 
+                        btns = $("<p>").appendTo(valueList)
+                        btns.append $("<button>", {type:"button"}).html(opts.localeStrings.dateOnly).bind "click", ->
+                            opts.derivedAttributesMacros[c+' Date'] = { fmt: "%m/%d/%y", src: c } 
+                            thisOrig.pivotUI(input,opts,true)
+                        btns.append $("<button>", {type:"button"}).html(opts.localeStrings.weekdayOnly).bind "click", ->
+                            opts.derivedAttributesMacros[c+' Weekday'] = { fmt: "%x-%w", src: c } 
+                            thisOrig.pivotUI(input,opts,true)
+                        btns.append $("<button>", {type:"button"}).html(opts.localeStrings.monthOnly).bind "click", ->
+                            opts.derivedAttributesMacros[c+' Month'] = { fmt: "%m", src: c }
+                            thisOrig.pivotUI(input,opts,true)
+                        btns.append $("<button>", {type:"button"}).html(opts.localeStrings.yearOnly).bind "click", ->
+                            opts.derivedAttributesMacros[c+' Year'] = { fmt: "%y", src: c }
+                            thisOrig.pivotUI(input,opts,true)
+                        btns.append $("<button>", {type:"button"}).html(opts.localeStrings.quarterOnly).bind "click", ->
+                            opts.derivedAttributesMacros[c+' Quarter'] = { fmt: "%q", src: c }
+                            thisOrig.pivotUI(input,opts,true)
+                        btns.append $("<button>", {type:"button"}).html(opts.localeStrings.hourOnly).bind "click", ->
+                            opts.derivedAttributesMacros[c+' Hour'] = { fmt: "%H", src: c }
+                            thisOrig.pivotUI(input,opts,true)
+
                     if keys.length > opts.menuLimit
                         valueList.append $("<p>").html(opts.localeStrings.tooMany)
                     else
@@ -631,7 +701,9 @@ callWithJQuery ($) ->
                         .append $("<button>", {type:"button"}).text("OK").bind "click", updateFilter
 
                     showFilterList = (e) ->
-                        valueList.css(left: e.pageX, top: e.pageY).toggle()
+                        wasvis = valueList.is(":visible")
+                        $('.pvtFilterBox').hide();  # hide all the other filter windows
+                        if (!wasvis) then valueList.css(left: e.pageX, top: e.pageY+8).toggle()  # move to current mouse pos, +8 for extra room
                         valueList.find('.pvtSearch').val('')
                         valueList.find('.pvtCheckContainer p').show()
 
@@ -700,6 +772,7 @@ callWithJQuery ($) ->
             refreshDelayed = =>
                 subopts =
                     derivedAttributes: opts.derivedAttributes
+                    derivedAttributesMacros: opts.derivedAttributesMacros
                     localeStrings: opts.localeStrings
                     rendererOptions: opts.rendererOptions
                     cols: [], rows: []
