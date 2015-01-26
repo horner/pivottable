@@ -34,7 +34,7 @@
                         onRefresh: Refresh
                     });
                 };
-                $.getJSON("mps.csv", makePivot);
+                $.get("mps.csv", makePivot);
                 $("#csv").bind("change", function(event){
                     var reader = new FileReader();
                     reader.onload = function(theFile) { 
